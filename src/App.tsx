@@ -7,6 +7,7 @@ import Pacientes from './pages/Pacientes'
 import PacientePerfil from './pages/PacientePerfil'
 import PacienteCadastro from './pages/PacienteCadastro'
 import Login from './pages/Login'
+import Agenda from './pages/Agenda'
 import './App.css'
 
 function App() {
@@ -54,6 +55,9 @@ function App() {
         >
           {/* Dashboard como página inicial */}
           <Route index element={<Dashboard />} />
+          
+          {/* Agenda */}
+          <Route path="agenda" element={<Agenda />} />
           
           {/* Gerenciamento de Pacientes */}
           <Route path="pacientes" element={<Pacientes />} />
