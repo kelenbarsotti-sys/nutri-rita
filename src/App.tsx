@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import Layout from './components/Layout'
+import LandingPage from './pages/LandingPage'
 import Dashboard from './pages/Dashboard'
 import Pacientes from './pages/Pacientes'
 import PacientePerfil from './pages/PacientePerfil'
@@ -43,15 +44,21 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Landing Page pública */}
+        <Route
+          path="/"
+          element={!session ? <LandingPage /> : <Navigate to="/dashboard" replace />}
+        />
+
         {/* Rota de Autenticação */}
         <Route 
           path="/login" 
-          element={!session ? <Login /> : <Navigate to="/" replace />} 
+          element={!session ? <Login /> : <Navigate to="/dashboard" replace />} 
         />
 
         {/* Rotas Privadas (Protegidas pelo Layout) */}
         <Route 
-          path="/" 
+          path="/dashboard" 
           element={session ? <Layout /> : <Navigate to="/login" replace />}
         >
           {/* Dashboard como página inicial */}
@@ -72,7 +79,7 @@ function App() {
         </Route>
 
         {/* Redirecionamento padrão para rotas não mapeadas */}
-        <Route path="*" element={<Navigate to={session ? "/" : "/login"} replace />} />
+        <Route path="*" element={<Navigate to={session ? "/dashboard" : "/"} replace />} />
       </Routes>
     </BrowserRouter>
   )

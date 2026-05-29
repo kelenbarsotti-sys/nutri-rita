@@ -52,7 +52,7 @@ export default function Login() {
       if (error) {
         alert(error.message)
       } else {
-        navigate('/')
+        navigate('/dashboard')
       }
     }
     setLoading(false)
