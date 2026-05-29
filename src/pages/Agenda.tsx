@@ -111,7 +111,11 @@ export default function Agenda() {
 
       if (pacientesError) throw pacientesError
       // Mesclar com pacientes fictícios (evitar duplicar por id)
-      const reais = pacientesData || []
+      const reais: Paciente[] = (pacientesData || []).map(p => ({
+        id: p.id,
+        nome: p.nome,
+        whatsapp: p.whatsapp ?? undefined,
+      }))
       const merged = [...reais]
       fakePacientes.forEach(f => {
         if (!merged.some(r => r.id === f.id)) merged.push(f)
