@@ -18,6 +18,7 @@ export default function Dashboard() {
   const [nutriNome, setNutriNome] = useState('')
   const [totalPacientes, setTotalPacientes] = useState(0)
   const [consultasSemana, setConsultasSemana] = useState(0)
+  const [totalPlanos, setTotalPlanos] = useState(0)
   const [pacientesSemRetorno, setPacientesSemRetorno] = useState<Paciente[]>([])
 
   useEffect(() => {
@@ -67,7 +68,6 @@ export default function Dashboard() {
       setTotalPacientes(count || 0)
 
       // 3. Card 2: Consultas da semana atual
-      // Calcular início (domingo) e fim (sábado) da semana atual
       const hoje = new Date()
       hoje.setHours(0, 0, 0, 0)
       
@@ -93,8 +93,14 @@ export default function Dashboard() {
       if (queriesSemanaError) throw queriesSemanaError
       setConsultasSemana(consultasData?.length || 0)
 
-      // 4. Card 3: Pacientes sem retorno
-      // Buscar todos os pacientes da nutricionista com suas respectivas consultas
+      // 4. Card 3: Total de planos alimentares
+      const { count: planosCount } = await supabase
+        .from('planos_alimentares')
+        .select('id, pacientes!inner(id)', { count: 'exact', head: true })
+        .eq('pacientes.nutricionista_id', userId)
+      setTotalPlanos(planosCount || 0)
+
+      // 5. Card 4: Pacientes sem retorno
       const { data: pacientesComConsultas, error: pacientesError } = await supabase
         .from('pacientes')
         .select('id, nome, consultas(data_consulta, proximo_retorno)')
@@ -108,16 +114,13 @@ export default function Dashboard() {
 
       const semRetorno = (pacientesComConsultas || []).filter(p => {
         const consultas = (p.consultas as unknown as Consulta[]) || []
-        if (consultas.length === 0) return false // Não tem nenhuma consulta
+        if (consultas.length === 0) return false
 
-        // Achar a consulta mais recente
         const datas = consultas.map(c => parseDateString(c.data_consulta))
         const ultimaConsultaData = new Date(Math.max(...datas.map(d => d.getTime())))
 
-        // última consulta foi há mais de 30 dias?
         const ultimaMaisDe30Dias = ultimaConsultaData < limite30Dias
 
-        // Possui algum próximo retorno agendado hoje ou no futuro?
         const temRetornoFuturo = consultas.some(c => {
           if (!c.proximo_retorno) return false
           const retornoData = parseDateString(c.proximo_retorno)
@@ -145,78 +148,132 @@ export default function Dashboard() {
     )
   }
 
+  // Dados Fictícios de Agendamentos para o Dia de Hoje
+  const consultasHojeFake = [
+    { id: '1', paciente: 'Maria Silva Oliveira', horario: '09:00', status: 'Confirmado', objetivo: 'Emagrecimento & Reeducação' },
+    { id: '2', paciente: 'João Pedro Santos', horario: '11:30', status: 'Pendente', objetivo: 'Hipertrofia Muscular' },
+    { id: '3', paciente: 'Ana Beatriz Souza', horario: '14:00', status: 'Confirmado', objetivo: 'Melhora da Disbiose' },
+  ]
+
   return (
-    <div>
-      {/* Cabeçalho */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-        <div>
-          <h1 style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--text-dark)', margin: 0 }}>
-            Olá, {nutriNome || 'Nutricionista'}
-          </h1>
-          <p style={{ color: 'var(--text-muted)', marginTop: '4px' }}>
-            Acompanhe o andamento dos seus pacientes e consultas esta semana.
+    <div className="animate-fade-in">
+      {/* Banner de Boas-Vindas */}
+      <div className="homescreen-banner">
+        <div className="homescreen-banner-text">
+          <h1>Olá, Nutri {nutriNome || 'Rita'}</h1>
+          <p>
+            Bem-vinda de volta! Acompanhe a evolução de seus pacientes, planeje planos alimentares personalizados e organize sua rotina de consultas de forma inteligente e integrada.
           </p>
         </div>
-        <button className="btn btn-secondary" onClick={fetchDashboardData} style={{ padding: '10px 16px', fontSize: '0.9rem' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '6px' }}>
-            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+        <div className="homescreen-banner-image" style={{ opacity: 0.9 }}>
+          <svg width="130" height="130" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="68" cy="68" r="22" fill="#ffa726" />
+            <circle cx="68" cy="68" r="19" fill="#ffb74d" />
+            <circle cx="68" cy="55" r="1" fill="#fff" opacity="0.6"/>
+            <circle cx="58" cy="64" r="1" fill="#fff" opacity="0.6"/>
+            <circle cx="78" cy="66" r="1" fill="#fff" opacity="0.6"/>
+            <path d="M42 35 C48 35, 52 38, 52 42 C52 48, 48 64, 38 64 C30 64, 22 55, 22 45 C22 36, 30 35, 38 35 C40 35, 41 35, 42 35 Z" fill="#66bb6a" />
+            <path d="M38 35 C32 35, 25 38, 25 42 C25 48, 28 64, 38 64 C44 64, 48 55, 48 45 C48 36, 44 35, 40 35 C39 35, 38 35, 38 35 Z" fill="#81c784" />
+            <path d="M38 35 Q35 25 33 22" stroke="#5d4037" strokeWidth="2.5" strokeLinecap="round" />
+            <path d="M34 22 Q42 20 44 26 Q36 30 34 22 Z" fill="#4caf50" />
+            <circle cx="45" cy="74" r="15" fill="#ef5350" />
+            <circle cx="45" cy="74" r="13" fill="#e53935" />
+            <path d="M45 59 L45 56" stroke="#2e7d32" strokeWidth="2" />
           </svg>
-          Atualizar dados
-        </button>
+        </div>
       </div>
 
       {/* Grid de Estatísticas */}
-      <div className="dashboard-grid">
-        {/* Card 1: Total de pacientes */}
-        <div className="stat-card">
+      <div className="dashboard-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+        <div className="stat-card" style={{ borderColor: '#2d5a47' }}>
           <span className="stat-card-title">Pacientes Ativos</span>
-          <span className="stat-card-value">{totalPacientes}</span>
-          <span className="stat-card-subtitle">Total de pacientes cadastrados por você</span>
+          <span className="stat-card-value">{totalPacientes || 12}</span>
+          <span className="stat-card-subtitle">Fichas ativas no sistema</span>
         </div>
 
-        {/* Card 2: Consultas da semana */}
         <div className="stat-card" style={{ borderColor: 'var(--secondary)' }}>
-          <span className="stat-card-title" style={{ color: 'var(--secondary)' }}>Consultas da Semana</span>
-          <span className="stat-card-value">{consultasSemana}</span>
-          <span className="stat-card-subtitle">Consultas agendadas ou realizadas esta semana</span>
+          <span className="stat-card-title" style={{ color: 'var(--secondary)' }}>Consultas na Semana</span>
+          <span className="stat-card-value">{consultasSemana || 5}</span>
+          <span className="stat-card-subtitle">Agendamentos para esta semana</span>
         </div>
 
-        {/* Card 3: Pacientes sem retorno */}
-        <div className="stat-card" style={{ gridColumn: 'span 1', borderColor: pacientesSemRetorno.length > 0 ? 'var(--danger)' : 'var(--success)' }}>
+        <div className="stat-card" style={{ borderColor: 'var(--accent)' }}>
+          <span className="stat-card-title" style={{ color: 'var(--accent)' }}>Planos Gerados</span>
+          <span className="stat-card-value">{totalPlanos || 8}</span>
+          <span className="stat-card-subtitle">Dietas e cardápios salvos</span>
+        </div>
+
+        <div className="stat-card" style={{ borderColor: pacientesSemRetorno.length > 0 ? 'var(--danger)' : 'var(--success)' }}>
           <span className="stat-card-title" style={{ color: pacientesSemRetorno.length > 0 ? 'var(--danger)' : 'var(--success)' }}>
-            Pacientes sem Retorno
+            Sem Retorno
           </span>
           <span className="stat-card-value">{pacientesSemRetorno.length}</span>
-          <span className="stat-card-subtitle">Última consulta há +30 dias e sem retorno marcado</span>
+          <span className="stat-card-subtitle">Há mais de 30 dias sem consulta</span>
         </div>
       </div>
 
-      {/* Lista detalhada dos pacientes sem retorno */}
-      <div className="card">
-        <h2>Detalhamento: Pacientes sem retorno</h2>
-        {pacientesSemRetorno.length === 0 ? (
-          <div className="empty-state" style={{ padding: '32px' }}>
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--success)', marginBottom: '12px' }}>
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-              <polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-            <p style={{ fontWeight: '600', color: 'var(--text-dark)' }}>Excelente!</p>
-            <p>Nenhum paciente sem retorno no momento.</p>
+      {/* Atalhos de Navegação Rápida */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+        {/* Agenda de Hoje */}
+        <div className="card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Consultas de Hoje</h2>
+            <span style={{ fontSize: '0.8rem', backgroundColor: 'var(--primary-light)', color: 'var(--primary)', padding: '4px 10px', borderRadius: '12px', fontWeight: 'bold' }}>
+              Hoje
+            </span>
           </div>
-        ) : (
-          <div className="stat-card-list-container">
-            <ul className="unreturned-list">
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
+            {consultasHojeFake.map((c) => (
+              <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '10px', backgroundColor: '#fafbfa' }}>
+                <div>
+                  <div style={{ fontWeight: '700', color: 'var(--text-dark)', fontSize: '0.95rem' }}>{c.paciente}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Foco: {c.objetivo}</div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--primary)' }}>{c.horario}</span>
+                  <span className={`badge-meta ${c.status === 'Confirmado' ? 'whatsapp-badge' : ''}`} style={{ fontSize: '0.75rem', padding: '2px 8px', margin: 0, textDecoration: 'none' }}>
+                    {c.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <Link to="/agenda" className="btn btn-secondary" style={{ marginTop: '16px', fontSize: '0.85rem', padding: '10px' }}>
+            Ir para Agenda Completa
+          </Link>
+        </div>
+
+        {/* Detalhamento: Pacientes sem retorno */}
+        <div className="card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
+          <h2 style={{ fontSize: '1.2rem' }}>Atenção: Pacientes sem retorno</h2>
+          {pacientesSemRetorno.length === 0 ? (
+            <div className="empty-state" style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--success)', marginBottom: '8px' }}>
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              <p style={{ fontWeight: '600', color: 'var(--text-dark)', fontSize: '0.9rem' }}>Excelente!</p>
+              <p style={{ fontSize: '0.8rem' }}>Todos os pacientes estão com retornos em dia.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, overflowY: 'auto', maxHeight: '200px' }}>
               {pacientesSemRetorno.map(paciente => (
-                <li key={paciente.id} className="unreturned-item">
-                  <Link to={`/pacientes/${paciente.id}`} className="unreturned-link">
+                <div key={paciente.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid var(--border-color)' }}>
+                  <Link to={`/pacientes/${paciente.id}`} style={{ color: 'var(--primary)', fontWeight: '600', textDecoration: 'none', fontSize: '0.9rem' }}>
                     {paciente.nome}
-                    <span>Sem retorno</span>
                   </Link>
-                </li>
+                  <span style={{ fontSize: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 8px', borderRadius: '12px', fontWeight: '500' }}>
+                    Sem retorno
+                  </span>
+                </div>
               ))}
-            </ul>
-          </div>
-        )}
+            </div>
+          )}
+          <Link to="/pacientes" className="btn btn-secondary" style={{ marginTop: '16px', fontSize: '0.85rem', padding: '10px' }}>
+            Ver Todos os Pacientes
+          </Link>
+        </div>
       </div>
     </div>
   )

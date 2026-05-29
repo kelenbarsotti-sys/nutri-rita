@@ -8,6 +8,7 @@ import PacientePerfil from './pages/PacientePerfil'
 import PacienteCadastro from './pages/PacienteCadastro'
 import Login from './pages/Login'
 import Agenda from './pages/Agenda'
+import PlanosAlimentares from './pages/PlanosAlimentares'
 import './App.css'
 
 function App() {
@@ -65,6 +66,9 @@ function App() {
           
           {/* Perfil do Paciente */}
           <Route path="pacientes/:id" element={<PacientePerfil />} />
+          
+          {/* Planos Alimentares */}
+          <Route path="planos-alimentares" element={<PlanosAlimentares />} />
         </Route>
 
         {/* Redirecionamento padrão para rotas não mapeadas */}

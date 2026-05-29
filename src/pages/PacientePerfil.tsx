@@ -50,6 +50,60 @@ interface PlanoAlimentar {
   created_at: string;
 }
 
+interface RefeicoesDia {
+  cafe_manha: string[];
+  lanche_manha: string[];
+  almoco: string[];
+  lanche_tarde: string[];
+  jantar: string[];
+}
+
+interface PlanoManualConteudo {
+  dias: {
+    segunda: RefeicoesDia;
+    terca: RefeicoesDia;
+    quarta: RefeicoesDia;
+    quinta: RefeicoesDia;
+    sexta: RefeicoesDia;
+    sabado: RefeicoesDia;
+    domingo: RefeicoesDia;
+  };
+}
+
+const criarPlanoLimpo = (): PlanoManualConteudo => ({
+  dias: {
+    segunda: { cafe_manha: ["", "", "", "", ""], lanche_manha: ["", "", "", "", ""], almoco: ["", "", "", "", ""], lanche_tarde: ["", "", "", "", ""], jantar: ["", "", "", "", ""] },
+    terca: { cafe_manha: ["", "", "", "", ""], lanche_manha: ["", "", "", "", ""], almoco: ["", "", "", "", ""], lanche_tarde: ["", "", "", "", ""], jantar: ["", "", "", "", ""] },
+    quarta: { cafe_manha: ["", "", "", "", ""], lanche_manha: ["", "", "", "", ""], almoco: ["", "", "", "", ""], lanche_tarde: ["", "", "", "", ""], jantar: ["", "", "", "", ""] },
+    quinta: { cafe_manha: ["", "", "", "", ""], lanche_manha: ["", "", "", "", ""], almoco: ["", "", "", "", ""], lanche_tarde: ["", "", "", "", ""], jantar: ["", "", "", "", ""] },
+    sexta: { cafe_manha: ["", "", "", "", ""], lanche_manha: ["", "", "", "", ""], almoco: ["", "", "", "", ""], lanche_tarde: ["", "", "", "", ""], jantar: ["", "", "", "", ""] },
+    sabado: { cafe_manha: ["", "", "", "", ""], lanche_manha: ["", "", "", "", ""], almoco: ["", "", "", "", ""], lanche_tarde: ["", "", "", "", ""], jantar: ["", "", "", "", ""] },
+    domingo: { cafe_manha: ["", "", "", "", ""], lanche_manha: ["", "", "", "", ""], almoco: ["", "", "", "", ""], lanche_tarde: ["", "", "", "", ""], jantar: ["", "", "", "", ""] }
+  }
+});
+
+const sanitizarPlano = (conteudo: any): PlanoManualConteudo => {
+  const limpo = criarPlanoLimpo()
+  if (!conteudo || !conteudo.dias) return limpo
+
+  const dias = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'] as const
+  const refeicoes = ['cafe_manha', 'lanche_manha', 'almoco', 'lanche_tarde', 'jantar'] as const
+
+  dias.forEach(dia => {
+    if (conteudo.dias[dia]) {
+      refeicoes.forEach(ref => {
+        if (Array.isArray(conteudo.dias[dia][ref])) {
+          for (let i = 0; i < 5; i++) {
+            limpo.dias[dia][ref][i] = conteudo.dias[dia][ref][i] || ""
+          }
+        }
+      })
+    }
+  })
+
+  return limpo
+}
+
 export default function PacientePerfil() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -63,6 +117,20 @@ export default function PacientePerfil() {
   
   // Sub-abas da ficha do paciente
   const [activeFichaTab, setActiveFichaTab] = useState<'pessoal' | 'clinico' | 'habitos'>('pessoal')
+
+  // --- ESTADOS DO PLANO ALIMENTAR MANUAL ---
+  const [isPlanoFormOpen, setIsPlanoFormOpen] = useState(false)
+  const [editingPlanoId, setEditingPlanoId] = useState<string | null>(null)
+  const [planoFormDiaAtivo, setPlanoFormDiaAtivo] = useState<keyof PlanoManualConteudo['dias']>('segunda')
+  const [planoFormConteudo, setPlanoFormConteudo] = useState<PlanoManualConteudo>(criarPlanoLimpo())
+  const [salvandoPlano, setSalvandoPlano] = useState(false)
+  
+  // Para visualização de abas no modal
+  const [planoVisualizarDiaAtivo, setPlanoVisualizarDiaAtivo] = useState<keyof PlanoManualConteudo['dias']>('segunda')
+
+  // --- ESTADOS DO PLANO ALIMENTAR VIA IA ---
+  const [gerandoPlanoIA, setGerandoPlanoIA] = useState(false)
+  const [iaLoadingMsg, setIaLoadingMsg] = useState('')
 
   // --- ESTADOS DE EDIÇÃO DA FICHA ---
   const [nome, setNome] = useState('')
@@ -494,6 +562,195 @@ export default function PacientePerfil() {
     setIsConsultaModalOpen(true)
   }
 
+  // --- GERAÇÃO DE PLANO ALIMENTAR VIA IA ---
+  const handleGerarPlanoIA = async () => {
+    if (!paciente) return;
+
+    const msgs = [
+      "Buscando dados do paciente...",
+      "Analisando metas, restrições e alergias...",
+      "IA calculando o cardápio ideal...",
+      "Estruturando refeições brasileiras...",
+      "Diversificando opções alimentares...",
+      "Finalizando formatação do plano..."
+    ];
+
+    setGerandoPlanoIA(true);
+    let msgIdx = 0;
+    setIaLoadingMsg(msgs[0]);
+    const interval = setInterval(() => {
+      msgIdx = (msgIdx + 1) % msgs.length;
+      setIaLoadingMsg(msgs[msgIdx]);
+    }, 1500);
+
+    try {
+      const pIdade = calcIdade(paciente.data_nascimento);
+      const pPeso = getPesoAtual();
+      
+      const promptDados = `
+Nome: ${paciente.nome}
+Idade: ${pIdade !== null ? `${pIdade} anos` : 'Não informada'}
+Sexo: ${paciente.sexo || 'Não informado'}
+Peso Atual: ${pPeso ? `${pPeso} kg` : 'Não informado'}
+Altura: ${paciente.altura ? `${paciente.altura} cm` : 'Não informada'}
+Objetivos: ${Array.isArray(paciente.objetivos) && paciente.objetivos.length > 0 ? paciente.objetivos.join(', ') : ''} ${paciente.objetivo_texto ? `(Detalhe: ${paciente.objetivo_texto})` : ''}
+Nível de Atividade: ${paciente.nivel_atividade || 'Não informado'}
+Patologias/Condições de Saúde: ${Array.isArray(paciente.patologias) && paciente.patologias.length > 0 ? paciente.patologias.join(', ') : 'Nenhuma'}
+Restrições Alimentares: ${Array.isArray(paciente.restricoes_alimentares) && paciente.restricoes_alimentares.length > 0 ? paciente.restricoes_alimentares.join(', ') : 'Nenhuma'}
+Alergias Alimentares: ${Array.isArray(paciente.alergias) && paciente.alergias.length > 0 ? paciente.alergias.join(', ') : 'Nenhuma'}
+Medicamentos: ${paciente.medicamentos || 'Nenhum'}
+Suplementos: ${paciente.suplementos || 'Nenhum'}
+Refeições por Dia: ${paciente.refeicoes_por_dia || 'Não informado'}
+Rotina: Horário que acorda: ${paciente.horario_acorda || 'Não informado'}, Horário que dorme: ${paciente.horario_dorme || 'Não informado'}
+Ingestão de Água Recomendada: ${paciente.litros_agua ? `${paciente.litros_agua} litros` : 'Não informado'}
+Atividade Física: ${paciente.atividade_fisica ? `Sim (${paciente.atividade_fisica_descricao || ''})` : 'Não'}
+Observações Gerais: ${paciente.observacoes || 'Nenhuma'}
+      `;
+
+      const res = await fetch('/api/gerar-plano', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ dados_do_paciente: promptDados })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Erro na resposta do servidor.');
+      }
+
+      const iaResponse = await res.json();
+      const planoManual = converterIAParaManual(iaResponse);
+      
+      setPlanoFormConteudo(planoManual);
+      setEditingPlanoId(null);
+      setPlanoFormDiaAtivo('segunda');
+      setIsPlanoFormOpen(true);
+      alert('Plano alimentar gerado pela IA com sucesso! Revise as refeições de cada dia antes de salvar.');
+
+    } catch (err: any) {
+      console.error('Erro ao gerar plano com IA:', err);
+      alert('Não foi possível gerar o plano com IA no momento. Deseja tentar novamente ou criar um Plano Manual?');
+    } finally {
+      clearInterval(interval);
+      setGerandoPlanoIA(false);
+    }
+  };
+
+  const converterIAParaManual = (iaPlan: any): PlanoManualConteudo => {
+    const limpo = criarPlanoLimpo();
+    if (!iaPlan || !Array.isArray(iaPlan.plano_semanal)) return limpo;
+
+    const mapeamentoDias: Record<string, keyof PlanoManualConteudo['dias']> = {
+      'segunda-feira': 'segunda', 'segunda': 'segunda',
+      'terca-feira': 'terca', 'terca': 'terca', 'terça-feira': 'terca', 'terça': 'terca',
+      'quarta-feira': 'quarta', 'quarta': 'quarta',
+      'quinta-feira': 'quinta', 'quinta': 'quinta',
+      'sexta-feira': 'sexta', 'sexta': 'sexta',
+      'sabado': 'sabado', 'sábado': 'sabado',
+      'domingo': 'domingo'
+    };
+
+    const mapRef: Record<string, keyof RefeicoesDia> = {
+      'cafe_da_manha': 'cafe_manha', 'cafe_manha': 'cafe_manha',
+      'lanche_manha': 'lanche_manha', 'lanche_da_manha': 'lanche_manha',
+      'almoco': 'almoco',
+      'lanche_tarde': 'lanche_tarde', 'lanche_da_tarde': 'lanche_tarde',
+      'jantar': 'jantar'
+    };
+
+    iaPlan.plano_semanal.forEach((diaData: any) => {
+      if (!diaData || !diaData.dia) return;
+      const diaNome = diaData.dia.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove accents
+        .trim();
+      
+      const diaKey = mapeamentoDias[diaNome];
+      if (!diaKey) return;
+
+      const refeicoesIA = diaData.refeicoes || {};
+
+      Object.keys(refeicoesIA).forEach((refIAKey) => {
+        const refKey = mapRef[refIAKey];
+        if (!refKey) return;
+
+        const itens = refeicoesIA[refIAKey];
+        if (Array.isArray(itens)) {
+          for (let i = 0; i < 5; i++) {
+            limpo.dias[diaKey][refKey][i] = itens[i] || "";
+          }
+        }
+      });
+    });
+
+    return limpo;
+  };
+
+  // --- CONTROLES E SALVAMENTO DO PLANO ALIMENTAR MANUAL ---
+  const handleNovoPlano = () => {
+    setEditingPlanoId(null)
+    setPlanoFormConteudo(criarPlanoLimpo())
+    setPlanoFormDiaAtivo('segunda')
+    setIsPlanoFormOpen(true)
+  }
+
+  const handleEditarPlano = (plano: PlanoAlimentar) => {
+    setEditingPlanoId(plano.id)
+    setPlanoFormConteudo(sanitizarPlano(plano.conteudo))
+    setPlanoFormDiaAtivo('segunda')
+    setIsPlanoFormOpen(true)
+  }
+
+  const handleInputChange = (dia: keyof PlanoManualConteudo['dias'], refeicao: keyof RefeicoesDia, index: number, value: string) => {
+    setPlanoFormConteudo(prev => {
+      const copy = JSON.parse(JSON.stringify(prev))
+      copy.dias[dia][refeicao][index] = value
+      return copy
+    })
+  }
+
+  async function handleSalvarPlanoAlimentar(e: React.FormEvent) {
+    e.preventDefault()
+    if (!paciente) return
+
+    try {
+      setSalvandoPlano(true)
+
+      if (editingPlanoId) {
+        // Modo Edição (UPDATE)
+        const { error } = await supabase
+          .from('planos_alimentares')
+          .update({ conteudo: planoFormConteudo })
+          .eq('id', editingPlanoId)
+        
+        if (error) throw error
+        alert('Plano alimentar atualizado com sucesso!')
+      } else {
+        // Modo Criação (INSERT)
+        const { error } = await supabase
+          .from('planos_alimentares')
+          .insert([{ paciente_id: paciente.id, conteudo: planoFormConteudo }])
+
+        if (error) throw error
+        alert('Plano alimentar cadastrado com sucesso!')
+      }
+
+      // Resetar estados e recarregar
+      setIsPlanoFormOpen(false)
+      setEditingPlanoId(null)
+      setPlanoFormConteudo(criarPlanoLimpo())
+      setPlanoFormDiaAtivo('segunda')
+      await fetchPerfilCompleto(paciente.id)
+
+    } catch (err: any) {
+      console.error('Erro ao salvar plano alimentar:', err)
+      alert('Erro ao salvar plano alimentar: ' + err.message)
+    } finally {
+      setSalvandoPlano(false)
+    }
+  }
+
   // --- DESENHAR GRÁFICO SVG ---
   const renderGraficoPeso = () => {
     // 1. Filtrar consultas que tenham peso e ordenar cronologicamente crescente
@@ -690,7 +947,80 @@ export default function PacientePerfil() {
   const renderPlanoConteudoFormatado = (conteudo: any) => {
     if (!conteudo) return <p>Nenhum conteúdo no plano alimentar.</p>
 
-    // Se o plano tiver refeições estruturadas
+    // Se o plano tiver a estrutura manual de dias
+    if (conteudo.dias) {
+      const diasSemana = [
+        { key: 'segunda', label: 'Segunda-Feira' },
+        { key: 'terca', label: 'Terça-Feira' },
+        { key: 'quarta', label: 'Quarta-Feira' },
+        { key: 'quinta', label: 'Quinta-Feira' },
+        { key: 'sexta', label: 'Sexta-Feira' },
+        { key: 'sabado', label: 'Sábado' },
+        { key: 'domingo', label: 'Domingo' }
+      ] as const;
+
+      const refeicoesDef = [
+        { key: 'cafe_manha', label: 'Café da Manhã', icon: '☀️' },
+        { key: 'lanche_manha', label: 'Lanche da Manhã', icon: '🍎' },
+        { key: 'almoco', label: 'Almoço', icon: '🍲' },
+        { key: 'lanche_tarde', label: 'Lanche da Tarde', icon: '🥛' },
+        { key: 'jantar', label: 'Jantar', icon: '🥗' }
+      ] as const;
+
+      const diaData = conteudo.dias[planoVisualizarDiaAtivo] || {};
+
+      return (
+        <div className="plano-detalhe-manual">
+          {/* Abas de dias dentro do modal */}
+          <div className="form-tabs" style={{ marginBottom: '20px', justifyContent: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            {diasSemana.map((d) => (
+              <button
+                key={d.key}
+                type="button"
+                className={`form-tab-btn ${planoVisualizarDiaAtivo === d.key ? 'active' : ''}`}
+                onClick={() => setPlanoVisualizarDiaAtivo(d.key)}
+                style={{ padding: '8px 16px', fontSize: '0.9rem' }}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {refeicoesDef.map((ref) => {
+              const itensRaw = diaData[ref.key] || [];
+              const itensValidos = Array.isArray(itensRaw) 
+                ? itensRaw.filter((i: any) => typeof i === 'string' && i.trim() !== '')
+                : [];
+
+              return (
+                <div key={ref.key} className="card-refeicao-detalhe">
+                  <div className="refeicao-header-detalhe">
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '1.2rem' }}>{ref.icon}</span>
+                      <span className="refeicao-nome-detalhe">{ref.label}</span>
+                    </div>
+                  </div>
+                  {itensValidos.length > 0 ? (
+                    <ul className="refeicao-itens-detalhe">
+                      {itensValidos.map((item: string, itemIdx: number) => (
+                        <li key={itemIdx}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem', fontStyle: 'italic' }}>
+                      Nenhuma opção cadastrada para esta refeição.
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // Se o plano tiver refeições estruturadas (formato antigo/outros)
     if (conteudo.refeicoes && Array.isArray(conteudo.refeicoes)) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -1340,66 +1670,209 @@ export default function PacientePerfil() {
       {/* --- ABA 3: PLANOS ALIMENTARES --- */}
       {activeMainTab === 'planos' && (
         <div className="animate-fade-in">
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <div>
-                <h2>Histórico de Planos Alimentares ({planos.length})</h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '4px' }}>
-                  Acompanhe e visualize os planos alimentares gerados para o paciente.
+          {/* Overlay de carregamento da IA */}
+          {gerandoPlanoIA && (
+            <div className="modal-overlay" style={{ zIndex: 1100 }}>
+              <div className="modal-card animate-scale-in" style={{ maxWidth: '420px', padding: '32px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+                <div className="spinner" style={{ width: '50px', height: '50px', borderWidth: '4px' }}></div>
+                <h3 style={{ margin: 0, color: 'var(--primary)', fontWeight: '800' }}>Gerando Plano com IA</h3>
+                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.95rem', minHeight: '48px', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {iaLoadingMsg}
                 </p>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                <button 
-                  className="btn btn-primary" 
-                  disabled 
-                  style={{ opacity: '0.6', cursor: 'not-allowed', position: 'relative' }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
-                  Gerar Plano Alimentar
-                </button>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>
-                  Disponível no próximo módulo
-                </span>
-              </div>
             </div>
+          )}
 
-            {planos.length === 0 ? (
-              <div className="empty-state">
-                <p>Nenhum plano alimentar gerado ainda.</p>
+          {!isPlanoFormOpen ? (
+            /* --- TELA 1: LISTAGEM / HISTÓRICO --- */
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <h2>Histórico de Planos Alimentares ({planos.length})</h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '4px' }}>
+                    Acompanhe e visualize os planos alimentares cadastrados para o paciente.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <button 
+                    type="button"
+                    className="btn" 
+                    onClick={handleGerarPlanoIA}
+                    disabled={gerandoPlanoIA}
+                    style={{
+                      background: 'linear-gradient(135deg, var(--accent) 0%, var(--primary) 100%)',
+                      color: 'white',
+                      boxShadow: '0 4px 12px rgba(170, 59, 255, 0.25)',
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    ✨ Gerar Plano com IA
+                  </button>
+                  <button 
+                    type="button"
+                    className="btn btn-primary" 
+                    onClick={handleNovoPlano}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '4px' }}>
+                      <line x1="12" y1="5" x2="12" y2="19"></line>
+                      <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Novo Plano Alimentar
+                  </button>
+                </div>
               </div>
-            ) : (
-              <div className="planos-list-grid">
-                {planos.map((plano) => (
-                  <div key={plano.id} className="plano-card-item">
-                    <div className="plano-card-header">
-                      <div className="plano-icon-badge">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                          <polyline points="14 2 14 8 20 8"></polyline>
-                        </svg>
+
+              {planos.length === 0 ? (
+                <div className="empty-state">
+                  <p>Nenhum plano alimentar cadastrado ainda.</p>
+                </div>
+              ) : (
+                <div className="planos-list-grid">
+                  {planos.map((plano) => (
+                    <div key={plano.id} className="plano-card-item">
+                      <div className="plano-card-header">
+                        <div className="plano-icon-badge">
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                          </svg>
+                        </div>
+                        <div>
+                          <span className="plano-titulo">Plano Alimentar</span>
+                          <span className="plano-data">
+                            Criado em {new Date(plano.created_at).toLocaleDateString('pt-BR')} às {new Date(plano.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="plano-titulo">Plano Alimentar</span>
-                        <span className="plano-data">
-                          Gerado em {new Date(plano.created_at).toLocaleDateString('pt-BR')} às {new Date(plano.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                        <button 
+                          className="btn btn-primary" 
+                          onClick={() => {
+                            setPlanoVisualizarDiaAtivo('segunda');
+                            setSelectedPlano(plano);
+                          }}
+                          style={{ flex: 1, padding: '10px 12px', fontSize: '0.85rem' }}
+                        >
+                          Visualizar
+                        </button>
+                        <button 
+                          className="btn btn-secondary" 
+                          onClick={() => handleEditarPlano(plano)}
+                          style={{ flex: 1, padding: '10px 12px', fontSize: '0.85rem' }}
+                        >
+                          Editar
+                        </button>
                       </div>
                     </div>
-                    <button 
-                      className="btn btn-secondary" 
-                      onClick={() => setSelectedPlano(plano)}
-                      style={{ width: '100%', padding: '10px 16px', fontSize: '0.875rem', marginTop: '16px' }}
-                    >
-                      Visualizar Plano Completo
-                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* --- TELA 2: FORMULÁRIO DE CRIAÇÃO / EDIÇÃO --- */
+            <form onSubmit={handleSalvarPlanoAlimentar} className="card animate-fade-in">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                <div>
+                  <h2>{editingPlanoId ? 'Editar Plano Alimentar' : 'Novo Plano Alimentar'}</h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '4px' }}>
+                    Configure os alimentos para cada dia da semana.
+                  </p>
+                </div>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => {
+                    setIsPlanoFormOpen(false);
+                    setEditingPlanoId(null);
+                  }}
+                  style={{ padding: '8px 16px', fontSize: '0.875rem' }}
+                >
+                  Cancelar
+                </button>
+              </div>
+
+              {/* Abas de Dias da Semana */}
+              <div className="form-tabs" style={{ marginBottom: '24px', flexWrap: 'wrap', gap: '4px' }}>
+                {[
+                  { key: 'segunda', label: 'Segunda-Feira' },
+                  { key: 'terca', label: 'Terça-Feira' },
+                  { key: 'quarta', label: 'Quarta-Feira' },
+                  { key: 'quinta', label: 'Quinta-Feira' },
+                  { key: 'sexta', label: 'Sexta-Feira' },
+                  { key: 'sabado', label: 'Sábado' },
+                  { key: 'domingo', label: 'Domingo' }
+                ].map((d) => (
+                  <button
+                    key={d.key}
+                    type="button"
+                    className={`form-tab-btn ${planoFormDiaAtivo === d.key ? 'active' : ''}`}
+                    onClick={() => setPlanoFormDiaAtivo(d.key as any)}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Grade de Refeições para o Dia Ativo */}
+              <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+                {[
+                  { key: 'cafe_manha', label: 'Café da Manhã', icon: '☀️' },
+                  { key: 'lanche_manha', label: 'Lanche da Manhã', icon: '🍎' },
+                  { key: 'almoco', label: 'Almoço', icon: '🍲' },
+                  { key: 'lanche_tarde', label: 'Lanche da Tarde', icon: '🥛' },
+                  { key: 'jantar', label: 'Jantar', icon: '🥗' }
+                ].map((ref) => (
+                  <div key={ref.key} className="consulta-card-item" style={{ padding: '20px', backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)' }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '16px', borderBottom: '1px dashed var(--border-color)', paddingBottom: '8px' }}>
+                      <span style={{ fontSize: '1.25rem' }}>{ref.icon}</span>
+                      <strong style={{ fontSize: '1rem', color: 'var(--primary)' }}>{ref.label}</strong>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {Array.from({ length: 5 }).map((_, idx) => (
+                        <input
+                          key={idx}
+                          type="text"
+                          placeholder={`Opção de Alimento ${idx + 1}`}
+                          value={planoFormConteudo.dias[planoFormDiaAtivo][ref.key as keyof RefeicoesDia][idx] || ''}
+                          onChange={(e) => handleInputChange(planoFormDiaAtivo, ref.key as keyof RefeicoesDia, idx, e.target.value)}
+                        />
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+
+              {/* Botões de Ação do Formulário */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setIsPlanoFormOpen(false);
+                    setEditingPlanoId(null);
+                  }}
+                  disabled={salvandoPlano}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={salvandoPlano}
+                  style={{ minWidth: '160px' }}
+                >
+                  {salvandoPlano ? (
+                    <>
+                      <span className="spinner" style={{ width: '18px', height: '18px', borderWidth: '2px' }}></span>
+                      Salvando...
+                    </>
+                  ) : (
+                    editingPlanoId ? 'Atualizar Plano' : 'Salvar Plano'
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       )}
 

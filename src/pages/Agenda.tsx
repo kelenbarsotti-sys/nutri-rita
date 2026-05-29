@@ -25,17 +25,54 @@ export default function Agenda() {
   const [pacientes, setPacientes] = useState<Paciente[]>([])
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([])
   const [userId, setUserId] = useState<string | null>(null)
+  // Mapa persistente de overrides de status (id do evento -> status)
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, 'Confirmado' | 'Pendente' | 'Cancelado'>>({}) 
+
+  // Estados do Calendário
+  const [currentDate, setCurrentDate] = useState(new Date())
+  const [viewMode, setViewMode] = useState<'mensal' | 'semanal'>('mensal')
+  const [selectedEvent, setSelectedEvent] = useState<any>(null)
 
   // Form states
   const [pacienteId, setPacienteId] = useState('')
+  const [pacienteNomeSelecionado, setPacienteNomeSelecionado] = useState('')
   const [data, setData] = useState('')
   const [hora, setHora] = useState('09:00')
   const [observacoes, setObservacoes] = useState('')
-  
+  const [statusAgendamento, setStatusAgendamento] = useState<'Confirmado' | 'Pendente' | 'Cancelado'>('Confirmado')
+
+  // Searchable select states
+  const [searchPaciente, setSearchPaciente] = useState('')
+  const [dropdownAberto, setDropdownAberto] = useState(false)
+
   // Feedback states
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
+
+  // Pacientes fictícios globais (mesmos do Pacientes.tsx)
+  const fakePacientes: Paciente[] = [
+    { id: 'fake-p1', nome: 'Maria Silva Oliveira',  whatsapp: '5511991234567' },
+    { id: 'fake-p2', nome: 'João Pedro Santos',     whatsapp: '5511982345678' },
+    { id: 'fake-p3', nome: 'Ana Beatriz Souza',     whatsapp: '5521993456789' },
+    { id: 'fake-p4', nome: 'Marcos Vinícius Costa', whatsapp: '5531994567890' },
+    { id: 'fake-p5', nome: 'Carolina Lima Dias',    whatsapp: '5541995678901' },
+    { id: 'fake-p6', nome: 'Roberto Fonseca Neto',  whatsapp: '5551996789012' },
+    { id: 'fake-p7', nome: 'Gabriela Vasconcelos',  whatsapp: '5561997890123' },
+    { id: 'fake-p8', nome: 'Felipe Albuquerque',    whatsapp: '5571998901234' },
+  ]
+
+  // Mapa de whatsapp fictício por nome (para agendamentos fake da agenda)
+  const whatsappPorNome: Record<string, string> = {
+    'Maria Silva Oliveira':  '5511991234567',
+    'João Pedro Santos':     '5511982345678',
+    'Ana Beatriz Souza':     '5521993456789',
+    'Marcos Vinícius Costa': '5531994567890',
+    'Carolina Lima Dias':    '5541995678901',
+    'Roberto Fonseca Neto':  '5551996789012',
+    'Gabriela Vasconcelos':  '5561997890123',
+    'Felipe Albuquerque':    '5571998901234',
+  }
 
   // Retorna string correspondente a data de hoje + 30 dias no formato YYYY-MM-DD
   const obterData30Dias = () => {
@@ -73,7 +110,13 @@ export default function Agenda() {
         .order('nome', { ascending: true })
 
       if (pacientesError) throw pacientesError
-      setPacientes(pacientesData || [])
+      // Mesclar com pacientes fictícios (evitar duplicar por id)
+      const reais = pacientesData || []
+      const merged = [...reais]
+      fakePacientes.forEach(f => {
+        if (!merged.some(r => r.id === f.id)) merged.push(f)
+      })
+      setPacientes(merged)
 
       // 2. Buscar agendamentos futuros e passados recentes
       const { data: agendamentosData, error: agendamentosError } = await supabase
@@ -116,9 +159,32 @@ export default function Agenda() {
     setData(obterData30Dias())
   }
 
+  // Limpar seleção de paciente
+  const limparSelecaoPaciente = () => {
+    setPacienteId('')
+    setPacienteNomeSelecionado('')
+    setSearchPaciente('')
+  }
+
+  // Helper: retorna estilos de cor por status
+  const getStatusStyle = (status: string): { bg: string; color: string; border: string } => {
+    if (status === 'Confirmado') return { bg: '#dcfce7', color: '#15803d', border: '#bbf7d0' }
+    if (status === 'Pendente')   return { bg: '#fef9c3', color: '#92400e', border: '#fde68a' }
+    return                              { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' }  // Cancelado
+  }
+
+  // Altera o status de um evento: salva no mapa de overrides E atualiza o modal em tempo real
+  const handleAlterarStatus = (novoStatus: 'Confirmado' | 'Pendente' | 'Cancelado') => {
+    if (!selectedEvent) return
+    // Persiste o override no mapa de estado (sobrevive a re-renders)
+    setStatusOverrides(prev => ({ ...prev, [selectedEvent.id]: novoStatus }))
+    // Atualiza o modal imediatamente (feedback visual instantâneo)
+    setSelectedEvent((prev: any) => ({ ...prev, status: novoStatus }))
+  }
+
   async function handleAgendar(e: React.FormEvent) {
     e.preventDefault()
-    if (!pacienteId || !data || !hora || !userId) {
+    if (!pacienteId || !data || !hora) {
       setErrorMsg('Por favor, preencha todos os campos obrigatórios.')
       return
     }
@@ -128,35 +194,56 @@ export default function Agenda() {
       setErrorMsg('')
       setSuccessMsg('')
 
-      // Mesclar data e hora
       const dataHoraStr = `${data}T${hora}:00`
       const dataHoraObj = new Date(dataHoraStr)
+      const isFake = pacienteId.startsWith('fake-')
 
-      const { error } = await supabase
-        .from('agendamentos')
-        .insert({
-          paciente_id: pacienteId,
-          nutricionista_id: userId,
+      if (isFake) {
+        // Paciente fictício: salvar apenas no estado local
+        const novoEvento = {
+          id: `local-${Date.now()}`,
+          paciente_nome: pacienteNomeSelecionado,
           data_hora: dataHoraObj.toISOString(),
-          observacoes: observacoes || null
-        })
+          status: 'Pendente',
+          observacoes: observacoes || null,
+          isReal: false
+        }
+        // Adicionar aos eventos da agenda localmente via um agendamento fictício temporário
+        setAgendamentos(prev => [
+          ...prev,
+          {
+            id: novoEvento.id,
+            data_hora: novoEvento.data_hora,
+            observacoes: novoEvento.observacoes,
+            paciente_id: pacienteId,
+            pacientes: { nome: pacienteNomeSelecionado, whatsapp: null }
+          } as any
+        ])
+      } else {
+        // Paciente real: salvar no banco
+        if (!userId) throw new Error('Usuário não autenticado')
+        const { error } = await supabase
+          .from('agendamentos')
+          .insert({
+            paciente_id: pacienteId,
+            nutricionista_id: userId,
+            data_hora: dataHoraObj.toISOString(),
+            observacoes: observacoes || null
+          })
+        if (error) throw error
+        fetchDados(userId)
+      }
 
-      if (error) throw error
-
-      setSuccessMsg('Consulta agendada com sucesso!')
-      
-      // Limpar formulário parcialmente (mantém paciente vazio e data redefinida para +30 dias)
-      setPacienteId('')
+      setSuccessMsg(`Consulta de ${pacienteNomeSelecionado} agendada para ${new Date(dataHoraObj).toLocaleDateString('pt-BR')} às ${hora} — ${statusAgendamento}!`)
+      limparSelecaoPaciente()
       setData(obterData30Dias())
       setHora('09:00')
       setObservacoes('')
-
-      // Recarregar agendamentos
-      fetchDados(userId)
+      setStatusAgendamento('Confirmado')
 
     } catch (err: any) {
       console.error('Erro ao agendar:', err)
-      setErrorMsg('Erro ao salvar o agendamento no banco de dados.')
+      setErrorMsg('Erro ao salvar o agendamento. Tente novamente.')
     } finally {
       setSubmitting(false)
     }
@@ -177,6 +264,7 @@ export default function Agenda() {
       if (error) throw error
 
       setSuccessMsg('Agendamento cancelado com sucesso.')
+      setSelectedEvent(null)
       fetchDados(userId)
     } catch (err) {
       console.error('Erro ao deletar agendamento:', err)
@@ -184,27 +272,229 @@ export default function Agenda() {
     }
   }
 
-  // Formatar a exibição de data e hora local
-  const formatarDataHora = (dataHoraISO: string) => {
-    const dataObj = new Date(dataHoraISO)
-    const dataStr = dataObj.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    })
-    const horaStr = dataObj.toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-    return `${dataStr} às ${horaStr}`
+  // --- LÓGICA DO CALENDÁRIO COM DADOS FICTÍCIOS ---
+  
+  // Lista rica de dados fictícios para preencher visualmente o calendário
+  const getFakeAgendamentos = () => {
+    const hoje = new Date()
+    const ano = hoje.getFullYear()
+    const mes = hoje.getMonth()
+    
+    return [
+      {
+        id: 'fake-1',
+        paciente_nome: 'Maria Silva Oliveira',
+        data_hora: new Date(ano, mes, hoje.getDate() - 1, 9, 0).toISOString(),
+        status: 'Confirmado',
+        observacoes: 'Retorno de 30 dias. Avaliação física e ajuste calórico.'
+      },
+      {
+        id: 'fake-2',
+        paciente_nome: 'João Pedro Santos',
+        data_hora: new Date(ano, mes, hoje.getDate(), 10, 30).toISOString(),
+        status: 'Confirmado',
+        observacoes: 'Acompanhamento nutricional focado em hipertrofia.'
+      },
+      {
+        id: 'fake-3',
+        paciente_nome: 'Ana Beatriz Souza',
+        data_hora: new Date(ano, mes, hoje.getDate(), 14, 0).toISOString(),
+        status: 'Pendente',
+        observacoes: 'Primeira consulta. Anamnese clínica e hábitos alimentares.'
+      },
+      {
+        id: 'fake-4',
+        paciente_nome: 'Marcos Vinícius Costa',
+        data_hora: new Date(ano, mes, hoje.getDate() + 1, 16, 0).toISOString(),
+        status: 'Confirmado',
+        observacoes: 'Paciente esportista, dieta para maratona.'
+      },
+      {
+        id: 'fake-5',
+        paciente_nome: 'Carolina Lima Dias',
+        data_hora: new Date(ano, mes, hoje.getDate() + 2, 8, 30).toISOString(),
+        status: 'Pendente',
+        observacoes: 'Dieta gestacional para controle de glicemia.'
+      },
+      {
+        id: 'fake-6',
+        paciente_nome: 'Roberto Fonseca Neto',
+        data_hora: new Date(ano, mes, hoje.getDate() + 3, 11, 0).toISOString(),
+        status: 'Confirmado',
+        observacoes: 'Ajuste de insulina e contagem de carboidratos.'
+      },
+      {
+        id: 'fake-7',
+        paciente_nome: 'Gabriela Vasconcelos',
+        data_hora: new Date(ano, mes, hoje.getDate() - 3, 15, 30).toISOString(),
+        status: 'Confirmado',
+        observacoes: 'Melhora da saúde intestinal, foco em fibras e hidratação.'
+      },
+      {
+        id: 'fake-8',
+        paciente_nome: 'Felipe Albuquerque',
+        data_hora: new Date(ano, mes, hoje.getDate() + 5, 14, 30).toISOString(),
+        status: 'Pendente',
+        observacoes: 'Cardápio vegetariano estrito para transição alimentar.'
+      },
+      {
+        id: 'fake-9',
+        paciente_nome: 'Maria Silva Oliveira',
+        data_hora: new Date(ano, mes, hoje.getDate() - 5, 10, 0).toISOString(),
+        status: 'Confirmado',
+        observacoes: 'Avaliação inicial antropométrica.'
+      },
+      {
+        id: 'fake-10',
+        paciente_nome: 'João Pedro Santos',
+        data_hora: new Date(ano, mes, hoje.getDate() - 2, 16, 0).toISOString(),
+        status: 'Confirmado',
+        observacoes: 'Ajuste de macros pós-treino.'
+      },
+      {
+        id: 'fake-11',
+        paciente_nome: 'Ana Beatriz Souza',
+        data_hora: new Date(ano, mes, hoje.getDate() + 4, 14, 0).toISOString(),
+        status: 'Pendente',
+        observacoes: 'Retorno quinzenal para avaliação de sintomas intestinais.'
+      },
+      {
+        id: 'fake-12',
+        paciente_nome: 'Maria Silva Oliveira',
+        data_hora: new Date(ano, mes, hoje.getDate() + 7, 10, 30).toISOString(),
+        status: 'Pendente',
+        observacoes: 'Entrega e explicação do novo plano alimentar.'
+      }
+    ]
   }
 
-  // Filtrar agendamentos futuros
-  const hoje = new Date()
-  hoje.setHours(0, 0, 0, 0)
-  
-  const proximosAgendamentos = agendamentos.filter(a => new Date(a.data_hora) >= hoje)
-  const agendamentosPassados = agendamentos.filter(a => new Date(a.data_hora) < hoje).reverse()
+  // Mesclar dados reais do banco com fictícios, aplicando overrides de status
+  const getTodosAgendamentos = () => {
+    const reaisMapped = agendamentos.map(a => {
+      const statusBase = (a as any)._status_local || (new Date(a.data_hora) < new Date() ? 'Confirmado' : 'Pendente')
+      return {
+        id: a.id,
+        paciente_nome: a.pacientes?.nome || 'Paciente',
+        data_hora: a.data_hora,
+        // Override tem prioridade máxima
+        status: statusOverrides[a.id] || statusBase,
+        observacoes: a.observacoes,
+        isReal: true,
+        whatsapp: a.pacientes?.whatsapp
+      }
+    })
+
+    // Aplicar overrides também nos eventos fictícios
+    const fakeMapped = getFakeAgendamentos().map(ev => ({
+      ...ev,
+      status: statusOverrides[ev.id] || ev.status
+    }))
+
+    return [...reaisMapped, ...fakeMapped]
+  }
+
+  const todosEventos = getTodosAgendamentos()
+
+  // Navegação no calendário
+  const prevPeriod = () => {
+    setCurrentDate(prev => {
+      const d = new Date(prev)
+      if (viewMode === 'mensal') {
+        d.setMonth(prev.getMonth() - 1)
+      } else {
+        d.setDate(prev.getDate() - 7)
+      }
+      return d
+    })
+  }
+
+  const nextPeriod = () => {
+    setCurrentDate(prev => {
+      const d = new Date(prev)
+      if (viewMode === 'mensal') {
+        d.setMonth(prev.getMonth() + 1)
+      } else {
+        d.setDate(prev.getDate() + 7)
+      }
+      return d
+    })
+  }
+
+  // Métodos de construção do grid de dias
+  const getDiasMensal = () => {
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+    
+    const startDayOfWeek = firstDay.getDay()
+    const days = []
+    
+    const prevMonthLastDay = new Date(year, month, 0).getDate()
+    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+      days.push({
+        date: new Date(year, month - 1, prevMonthLastDay - i),
+        isCurrentMonth: false
+      })
+    }
+    
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+      days.push({
+        date: new Date(year, month, i),
+        isCurrentMonth: true
+      })
+    }
+    
+    const remaining = (7 - (days.length % 7)) % 7
+    for (let i = 1; i <= remaining; i++) {
+      days.push({
+        date: new Date(year, month + 1, i),
+        isCurrentMonth: false
+      })
+    }
+    
+    while (days.length < 42) {
+      const lastVal = days[days.length - 1].date.getDate()
+      days.push({
+        date: new Date(year, month + 1, lastVal + 1),
+        isCurrentMonth: false
+      })
+    }
+    
+    return days
+  }
+
+  const getDiasSemanal = () => {
+    const startOfWeek = new Date(currentDate)
+    const day = startOfWeek.getDay()
+    const diff = startOfWeek.getDate() - day
+    startOfWeek.setDate(diff)
+    
+    const days = []
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startOfWeek)
+      d.setDate(startOfWeek.getDate() + i)
+      days.push(d)
+    }
+    return days
+  }
+
+  // Filtrar eventos por dia específico
+  const getEventosDoDia = (date: Date) => {
+    const dateStr = date.toISOString().split('T')[0]
+    return todosEventos.filter(e => {
+      const eventDateStr = new Date(e.data_hora).toISOString().split('T')[0]
+      return eventDateStr === dateStr
+    }).sort((a, b) => new Date(a.data_hora).getTime() - new Date(b.data_hora).getTime())
+  }
+
+  const formatarHora = (dataHoraISO: string) => {
+    const d = new Date(dataHoraISO)
+    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const diasSemanaNomes = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+  const mesesNomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
   if (loading) {
     return (
@@ -216,20 +506,20 @@ export default function Agenda() {
   }
 
   return (
-    <div>
-      {/* Cabeçalho */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+    <div className="animate-fade-in">
+      {/* Cabeçalho da Agenda */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h1 style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--text-dark)', margin: 0 }}>
-            Agenda de Pacientes
+          <h1 style={{ fontSize: '2.2rem', fontWeight: '800', color: 'var(--primary)', margin: 0 }}>
+            Agenda Integrada
           </h1>
           <p style={{ color: 'var(--text-muted)', marginTop: '4px' }}>
-            Agende novas consultas ou gerencie os retornos de seus pacientes.
+            Gerencie e acompanhe o agendamento de consultas da semana e do mês de forma centralizada.
           </p>
         </div>
       </div>
 
-      {/* Alertas de sucesso e erro */}
+      {/* Alertas */}
       {errorMsg && (
         <div className="card" style={{ borderLeft: '4px solid var(--danger)', backgroundColor: '#fef2f2', color: '#991b1b', padding: '16px', marginBottom: '24px' }}>
           <strong>Erro:</strong> {errorMsg}
@@ -242,26 +532,133 @@ export default function Agenda() {
       )}
 
       {/* Grid Principal */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '32px', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '32px', alignItems: 'start' }}>
         
         {/* Formulário de Novo Agendamento */}
         <div className="card">
           <h2>Novo Agendamento</h2>
           <form onSubmit={handleAgendar} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
-            <div className="form-group">
-              <label htmlFor="paciente">Selecione o Paciente *</label>
-              <select
-                id="paciente"
-                value={pacienteId}
-                onChange={(e) => setPacienteId(e.target.value)}
-                required
-              >
-                <option value="">Selecione um paciente...</option>
-                {pacientes.map(p => (
-                  <option key={p.id} value={p.id}>{p.nome}</option>
-                ))}
-              </select>
+            <div className="form-group" style={{ position: 'relative' }}>
+              <label htmlFor="busca-paciente">Selecione o Paciente *</label>
+
+              {/* Campo de busca */}
+              {pacienteNomeSelecionado ? (
+                // Paciente já selecionado: exibir chip com nome e botão de limpar
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 14px',
+                  border: '2px solid var(--primary)',
+                  borderRadius: '10px',
+                  backgroundColor: 'var(--primary-light)',
+                  fontSize: '0.95rem',
+                  fontWeight: '600',
+                  color: 'var(--primary)'
+                }}>
+                  <span>✅ {pacienteNomeSelecionado}</span>
+                  <button
+                    type="button"
+                    onClick={limparSelecaoPaciente}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--text-muted)', lineHeight: 1 }}
+                    title="Alterar paciente"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ position: 'relative' }}>
+                    <svg
+                      width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                      style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }}
+                    >
+                      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input
+                      id="busca-paciente"
+                      type="text"
+                      value={searchPaciente}
+                      onChange={(e) => { setSearchPaciente(e.target.value); setDropdownAberto(true) }}
+                      onFocus={() => setDropdownAberto(true)}
+                      onBlur={() => setTimeout(() => setDropdownAberto(false), 180)}
+                      placeholder="Digite para buscar paciente..."
+                      autoComplete="off"
+                      style={{
+                        paddingLeft: '36px',
+                        width: '100%',
+                        fontSize: '0.95rem',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '10px',
+                        backgroundColor: '#fff'
+                      }}
+                    />
+                  </div>
+
+                  {/* Dropdown de resultados */}
+                  {dropdownAberto && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      left: 0,
+                      right: 0,
+                      backgroundColor: '#fff',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '10px',
+                      boxShadow: 'var(--shadow-md)',
+                      zIndex: 999,
+                      maxHeight: '220px',
+                      overflowY: 'auto'
+                    }}>
+                      {pacientes
+                        .filter(p => p.nome.toLowerCase().includes(searchPaciente.toLowerCase()))
+                        .length === 0 ? (
+                        <div style={{ padding: '12px 16px', color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                          Nenhum paciente encontrado.
+                        </div>
+                      ) : (
+                        pacientes
+                          .filter(p => p.nome.toLowerCase().includes(searchPaciente.toLowerCase()))
+                          .map(p => (
+                            <div
+                              key={p.id}
+                              onMouseDown={() => {
+                                setPacienteId(p.id)
+                                setPacienteNomeSelecionado(p.nome)
+                                setSearchPaciente('')
+                                setDropdownAberto(false)
+                              }}
+                              style={{
+                                padding: '10px 16px',
+                                cursor: 'pointer',
+                                fontSize: '0.92rem',
+                                color: 'var(--text-dark)',
+                                borderBottom: '1px solid var(--border-color)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                transition: 'background 0.15s'
+                              }}
+                              onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--primary-light)')}
+                              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                            >
+                              <div style={{
+                                width: '30px', height: '30px', borderRadius: '50%',
+                                backgroundColor: 'var(--primary)', color: '#fff',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '0.85rem', fontWeight: '700', flexShrink: 0
+                              }}>
+                                {p.nome.charAt(0)}
+                              </div>
+                              {p.nome}
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             <div className="form-group">
@@ -290,9 +687,6 @@ export default function Agenda() {
                 onChange={(e) => setData(e.target.value)}
                 required
               />
-              <small style={{ color: 'var(--text-muted)', marginTop: '4px', fontSize: '0.8rem' }}>
-                * Pré-preenchido para 30 dias a partir de hoje (retorno recomendado).
-              </small>
             </div>
 
             <div className="form-group">
@@ -306,13 +700,14 @@ export default function Agenda() {
               />
             </div>
 
+
             <div className="form-group">
-              <label htmlFor="observacoes">Observações / Notas</label>
+              <label htmlFor="observacoes">Notas da Consulta</label>
               <textarea
                 id="observacoes"
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value)}
-                placeholder="Ex: Retorno de avaliação antropométrica, foco em perda de gordura..."
+                placeholder="Ex: Primeira avaliação de bioimpedância."
                 rows={3}
               />
             </div>
@@ -321,153 +716,307 @@ export default function Agenda() {
               type="submit" 
               className="btn btn-primary" 
               disabled={submitting}
-              style={{ width: '100%', marginTop: '10px' }}
+              style={{ width: '100%' }}
             >
-              {submitting ? 'Salvando...' : 'Agendar Consulta'}
+              {submitting ? 'Aguarde...' : 'Agendar Consulta'}
             </button>
           </form>
         </div>
 
-        {/* Listagem de Agendamentos */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {/* Calendário Interativo */}
+        <div className="card" style={{ padding: '20px' }}>
           
-          <div className="card">
-            <h2>Próximas Consultas ({proximosAgendamentos.length})</h2>
-            
-            {proximosAgendamentos.length === 0 ? (
-              <div className="empty-state" style={{ padding: '32px' }}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--text-muted)', marginBottom: '12px' }}>
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                  <line x1="16" y1="2" x2="16" y2="6" />
-                  <line x1="8" y1="2" x2="8" y2="6" />
-                  <line x1="3" y1="10" x2="21" y2="10" />
-                </svg>
-                <p style={{ fontWeight: '600' }}>Nenhuma consulta agendada</p>
-                <p>Use o formulário ao lado para agendar uma nova consulta.</p>
+          {/* Header do Calendário */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <h2 style={{ margin: 0, fontSize: '1.4rem', color: 'var(--primary)' }}>
+                {viewMode === 'mensal' 
+                  ? `${mesesNomes[currentDate.getMonth()]} de ${currentDate.getFullYear()}`
+                  : `Semana de ${currentDate.getDate()} ${mesesNomes[currentDate.getMonth()]}`}
+              </h2>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button onClick={prevPeriod} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>&larr;</button>
+                <button onClick={() => setCurrentDate(new Date())} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>Hoje</button>
+                <button onClick={nextPeriod} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>&rarr;</button>
               </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {proximosAgendamentos.map((agendamento) => (
-                  <div
-                    key={agendamento.id}
-                    style={{
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '8px',
-                      padding: '16px',
-                      backgroundColor: '#fff',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      boxShadow: 'var(--shadow-sm)',
-                      position: 'relative',
-                      overflow: 'hidden'
-                    }}
-                  >
-                    <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: '4px', backgroundColor: 'var(--primary)' }}></div>
-                    <div style={{ paddingLeft: '8px' }}>
-                      <h4 style={{ margin: '0 0 4px 0', fontSize: '1.05rem', color: 'var(--text-dark)' }}>
-                        {agendamento.pacientes?.nome}
-                      </h4>
-                      <p style={{ margin: '0 0 6px 0', fontSize: '0.9rem', color: 'var(--primary)', fontWeight: '600' }}>
-                        {formatarDataHora(agendamento.data_hora)}
-                      </p>
-                      {agendamento.observacoes && (
-                        <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                          Nota: {agendamento.observacoes}
-                        </p>
-                      )}
-                    </div>
+            </div>
 
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      {agendamento.pacientes?.whatsapp && (
-                        <a
-                          href={`https://wa.me/${agendamento.pacientes.whatsapp.replace(/\D/g, '')}?text=Olá,%20gostaria%20de%20confirmar%20sua%20consulta%20agendada%20para%20o%20dia%20${encodeURIComponent(formatarDataHora(agendamento.data_hora))}.`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn"
-                          style={{
-                            padding: '8px',
-                            backgroundColor: '#25D366',
-                            color: '#fff',
-                            borderRadius: '6px',
-                            width: '36px',
-                            height: '36px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                          title="Lembrete por WhatsApp"
-                        >
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.5-5.739-1.453L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.37 9.864-9.799.002-2.63-1.023-5.101-2.885-6.97C16.49 1.967 14.03 .942 11.996.942c-5.445 0-9.87 4.373-9.875 9.805-.002 1.794.494 3.542 1.439 5.093l-1.008 3.682 3.823-.988c1.558.835 3.087 1.24 4.692 1.24zm10.74-7.447c-.297-.148-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-                          </svg>
-                        </a>
-                      )}
-                      
-                      <button
-                        onClick={() => handleCancelarAgendamento(agendamento.id)}
-                        className="btn"
-                        style={{
-                          padding: '8px',
-                          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                          color: 'var(--danger)',
-                          borderRadius: '6px',
-                          width: '36px',
-                          height: '36px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        title="Cancelar Agendamento"
-                      >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <polyline points="3 6 5 6 21 6"></polyline>
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="calendar-view-selector" style={{ margin: 0 }}>
+              <button 
+                type="button" 
+                className={`btn ${viewMode === 'mensal' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setViewMode('mensal')}
+                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+              >
+                Mensal
+              </button>
+              <button 
+                type="button" 
+                className={`btn ${viewMode === 'semanal' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setViewMode('semanal')}
+                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+              >
+                Semanal
+              </button>
+            </div>
           </div>
 
-          {/* Histórico Recente */}
-          {agendamentosPassados.length > 0 && (
-            <div className="card">
-              <h2>Histórico Recente ({agendamentosPassados.length})</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {agendamentosPassados.slice(0, 5).map((agendamento) => (
-                  <div
-                    key={agendamento.id}
-                    style={{
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '8px',
-                      padding: '12px 16px',
-                      backgroundColor: 'var(--bg-main)',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      opacity: 0.8
-                    }}
+          {/* Renderização do Calendário Mensal */}
+          {viewMode === 'mensal' ? (
+            <div className="calendar-grid">
+              {diasSemanaNomes.map((d, idx) => (
+                <div key={idx} className="calendar-header-cell">{d}</div>
+              ))}
+              
+              {getDiasMensal().map((dCell, idx) => {
+                const diaEventos = getEventosDoDia(dCell.date)
+                const isHoje = dCell.date.toDateString() === new Date().toDateString()
+                
+                return (
+                  <div 
+                    key={idx} 
+                    className={`calendar-day-cell ${!dCell.isCurrentMonth ? 'other-month' : ''} ${isHoje ? 'today' : ''}`}
                   >
-                    <div>
-                      <h4 style={{ margin: '0 0 2px 0', fontSize: '0.95rem', color: 'var(--text-dark)' }}>
-                        {agendamento.pacientes?.nome}
-                      </h4>
-                      <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                        Realizado em {formatarDataHora(agendamento.data_hora)}
-                      </p>
+                    <div className="calendar-day-number">{dCell.date.getDate()}</div>
+                    <div className="calendar-day-events">
+                      {diaEventos.map((ev) => {
+                        const st = getStatusStyle(ev.status)
+                        return (
+                          <div 
+                            key={ev.id} 
+                            className={`calendar-event-card ${ev.status.toLowerCase()}`}
+                            onClick={() => setSelectedEvent(ev)}
+                            title={`${formatarHora(ev.data_hora)} - ${ev.paciente_nome} [${ev.status}]`}
+                          >
+                            <span className="event-time">{formatarHora(ev.data_hora)}</span>
+                            <span className="event-name">{ev.paciente_nome}</span>
+                            <span style={{
+                              fontSize: '0.65rem',
+                              fontWeight: '700',
+                              padding: '2px 6px',
+                              borderRadius: '20px',
+                              backgroundColor: st.bg,
+                              color: st.color,
+                              border: `1px solid ${st.border}`,
+                              marginTop: '3px',
+                              display: 'inline-block',
+                              letterSpacing: '0.02em'
+                            }}>{ev.status}</span>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
-                ))}
-              </div>
+                )
+              })}
+            </div>
+          ) : (
+            // Renderização do Calendário Semanal
+            <div className="weekly-calendar-grid">
+              {getDiasSemanal().map((dia, idx) => {
+                const diaEventos = getEventosDoDia(dia)
+                const isHoje = dia.toDateString() === new Date().toDateString()
+                
+                return (
+                  <div key={idx} className="weekly-day-row">
+                    <div className="weekly-day-info" style={{ backgroundColor: isHoje ? 'var(--primary-light)' : '#fcfdfc' }}>
+                      <span className="weekly-day-name">{diasSemanaNomes[dia.getDay()]}</span>
+                      <span className="weekly-day-date">{dia.getDate()} / {mesesNomes[dia.getMonth()]}</span>
+                    </div>
+                    <div className="weekly-day-events">
+                      {diaEventos.length === 0 ? (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                          Nenhuma consulta agendada.
+                        </span>
+                      ) : (
+                        diaEventos.map((ev) => {
+                          const st = getStatusStyle(ev.status)
+                          return (
+                            <div 
+                              key={ev.id} 
+                              className={`calendar-event-card ${ev.status.toLowerCase()}`}
+                              onClick={() => setSelectedEvent(ev)}
+                              style={{ minWidth: '160px', padding: '10px 12px', fontSize: '0.85rem' }}
+                            >
+                              <span className="event-time" style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{formatarHora(ev.data_hora)}</span>
+                              <span className="event-name" style={{ fontSize: '0.9rem' }}>{ev.paciente_nome}</span>
+                              <span style={{
+                                fontSize: '0.7rem',
+                                fontWeight: '700',
+                                padding: '2px 8px',
+                                borderRadius: '20px',
+                                backgroundColor: st.bg,
+                                color: st.color,
+                                border: `1px solid ${st.border}`,
+                                marginTop: '4px',
+                                display: 'inline-block'
+                              }}>{ev.status}</span>
+                              {ev.observacoes && (
+                                <span style={{ fontSize: '0.75rem', opacity: 0.8, fontStyle: 'italic', marginTop: '4px' }}>
+                                  {ev.observacoes.slice(0, 30)}{ev.observacoes.length > 30 ? '...' : ''}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
 
         </div>
 
       </div>
+
+      {/* MODAL DE DETALHES DO EVENTO */}
+      {selectedEvent && (
+        <div className="modal-overlay">
+          <div className="modal-card animate-scale-in">
+            <div className="modal-header">
+              <h3>Detalhes do Agendamento</h3>
+              <button className="btn-close-modal" onClick={() => setSelectedEvent(null)}>&times;</button>
+            </div>
+            
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+              {/* Paciente + WhatsApp */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+                <div>
+                  <strong style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Paciente</strong>
+                  <span style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--text-dark)' }}>{selectedEvent.paciente_nome}</span>
+                </div>
+
+                {/* Bloco WhatsApp */}
+                {(() => {
+                  const wpp = selectedEvent.whatsapp || whatsappPorNome[selectedEvent.paciente_nome]
+                  if (!wpp) return null
+                  const dataFormatada = new Date(selectedEvent.data_hora).toLocaleDateString('pt-BR')
+                  const horaFormatada = formatarHora(selectedEvent.data_hora)
+                  const msg = encodeURIComponent(`Olá ${selectedEvent.paciente_nome.split(' ')[0]}! 🌿 Passando para confirmar sua consulta marcada para o dia *${dataFormatada}* às *${horaFormatada}h*. Pode confirmar sua presença?`)
+                  const wppLink = `https://wa.me/${wpp}?text=${msg}`
+                  const wppFormatado = wpp.replace(/(\d{2})(\d{2})(\d{5})(\d{4})/, '+$1 ($2) $3-$4')
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                      <strong style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>WhatsApp</strong>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <span style={{ fontWeight: '600', color: 'var(--text-dark)', fontSize: '0.9rem' }}>{wppFormatado}</span>
+                        <a
+                          href={wppLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '7px 14px',
+                            borderRadius: '20px',
+                            backgroundColor: '#25D366',
+                            color: '#fff',
+                            fontWeight: '700',
+                            fontSize: '0.82rem',
+                            textDecoration: 'none',
+                            boxShadow: '0 2px 8px rgba(37,211,102,0.35)',
+                            transition: 'opacity 0.15s'
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
+                          onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                          </svg>
+                          Confirmar via WhatsApp
+                        </a>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              {/* Data e Hora */}
+              <div>
+                <strong style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Data e Hora</strong>
+                <span style={{ fontWeight: '700', color: 'var(--primary)', fontSize: '1rem' }}>
+                  {new Date(selectedEvent.data_hora).toLocaleDateString('pt-BR')} às {formatarHora(selectedEvent.data_hora)}
+                </span>
+              </div>
+
+              {/* Seletor de Status */}
+              <div>
+                <strong style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>Status da Consulta</strong>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  {(['Confirmado', 'Pendente', 'Cancelado'] as const).map(s => {
+                    const st = getStatusStyle(s)
+                    const isActive = selectedEvent.status === s
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => handleAlterarStatus(s)}
+                        style={{
+                          flex: 1,
+                          padding: '10px 6px',
+                          borderRadius: '10px',
+                          border: `2px solid ${isActive ? st.border : 'var(--border-color)'}`,
+                          backgroundColor: isActive ? st.bg : '#fff',
+                          color: isActive ? st.color : 'var(--text-muted)',
+                          fontWeight: isActive ? '700' : '500',
+                          fontSize: '0.85rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.18s ease',
+                          boxShadow: isActive ? `0 0 0 3px ${st.border}` : 'none'
+                        }}
+                      >
+                        {s === 'Confirmado' && '✅ '}
+                        {s === 'Pendente'   && '⏳ '}
+                        {s === 'Cancelado'  && '❌ '}
+                        {s}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Notas */}
+              {selectedEvent.observacoes && (
+                <div>
+                  <strong style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Notas de Acompanhamento</strong>
+                  <div style={{ backgroundColor: 'var(--bg-main)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '0.9rem', color: 'var(--text-dark)', lineHeight: '1.6' }}>
+                    {selectedEvent.observacoes}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              {selectedEvent.isReal ? (
+                <button 
+                  type="button" 
+                  className="btn" 
+                  style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)' }}
+                  onClick={() => handleCancelarAgendamento(selectedEvent.id)}
+                >
+                  Cancelar Consulta
+                </button>
+              ) : (
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic', alignSelf: 'center', marginRight: 'auto' }}>
+                  * Agendamento Demonstrativo
+                </span>
+              )}
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setSelectedEvent(null)}
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
