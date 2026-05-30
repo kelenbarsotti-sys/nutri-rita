@@ -185,8 +185,8 @@ export default function Dashboard() {
 
       {/* Grid de Estatísticas */}
       <div className="dashboard-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-        <div className="stat-card" style={{ borderColor: '#2d5a47' }}>
-          <span className="stat-card-title">Pacientes Ativos</span>
+        <div className="stat-card" style={{ borderColor: 'var(--primary)' }}>
+          <span className="stat-card-title" style={{ color: 'var(--primary)' }}>Pacientes Ativos</span>
           <span className="stat-card-value">{totalPacientes || 12}</span>
           <span className="stat-card-subtitle">Fichas ativas no sistema</span>
         </div>

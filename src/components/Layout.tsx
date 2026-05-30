@@ -14,6 +14,11 @@ export default function Layout() {
 
   return (
     <div className="app-layout">
+      {/* Background Orbs */}
+      <div className="app-orb app-orb-1" />
+      <div className="app-orb app-orb-2" />
+      <div className="app-orb app-orb-3" />
+
       {/* Sidebar Fixa */}
       <aside className="sidebar">
         <div className="sidebar-logo">
@@ -23,12 +28,18 @@ export default function Layout() {
             height="28" 
             viewBox="0 0 24 24" 
             fill="none" 
-            stroke="currentColor" 
+            stroke="url(#logoGrad)" 
             strokeWidth="2.5" 
             strokeLinecap="round" 
-            strokeLinejoin="round" 
-            style={{ color: 'var(--primary)' }}
+            strokeLinejoin="round"
           >
+            <defs>
+              <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#a78bfa" />
+                <stop offset="50%" stopColor="#f59e0b" />
+                <stop offset="100%" stopColor="#c084fc" />
+              </linearGradient>
+            </defs>
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
           <h2>Nutri Rita</h2>
@@ -127,6 +138,13 @@ export default function Layout() {
         </nav>
 
         <div className="sidebar-footer">
+          <div className="sidebar-profile-box">
+            <div className="sidebar-avatar">R</div>
+            <div className="sidebar-profile-info">
+              <span className="sidebar-profile-name">Dra. Rita Souza</span>
+              <span className="sidebar-profile-role">Nutricionista</span>
+            </div>
+          </div>
           <button onClick={handleLogout} className="sidebar-btn-logout">
             <svg 
               width="18" 
