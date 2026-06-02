@@ -478,7 +478,7 @@ export default function Pacientes() {
     return (
       <div className="animate-fade-in">
         {/* Cabeçalho */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
+        <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
           <button 
             onClick={() => setActiveView('lista_pacientes')} 
             className="btn btn-secondary"
@@ -486,10 +486,22 @@ export default function Pacientes() {
           >
             &larr; Voltar para a Lista
           </button>
-          <h1 style={{ fontSize: '2.2rem', fontWeight: '800', color: 'var(--primary)', margin: 0 }}>
+          <h1 style={{ fontSize: '2.2rem', fontWeight: '800', color: 'var(--primary)', margin: 0, flex: 1 }}>
             Ficha Clínica Detalhada
           </h1>
+          <button
+            className="btn btn-primary no-print"
+            onClick={() => window.print()}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+            </svg>
+            Imprimir Ficha
+          </button>
         </div>
+
+        <div id="print-area">
 
         {/* Ficha Card */}
         <div className="card" style={{ padding: '32px' }}>
@@ -505,7 +517,7 @@ export default function Pacientes() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
             
             {/* Bloco 1: Dados Pessoais */}
-            <div className="card" style={{ backgroundColor: '#fafbfa', margin: 0 }}>
+            <div className="card" style={{ backgroundColor: 'var(--bg-main)', margin: 0 }}>
               <h3 style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', color: 'var(--primary)', marginTop: 0, fontSize: '1.15rem' }}>
                 📋 Dados Pessoais
               </h3>
@@ -516,7 +528,7 @@ export default function Pacientes() {
             </div>
 
             {/* Bloco 2: Avaliação Nutricional */}
-            <div className="card" style={{ backgroundColor: '#fafbfa', margin: 0 }}>
+            <div className="card" style={{ backgroundColor: 'var(--bg-main)', margin: 0 }}>
               <h3 style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', color: 'var(--primary)', marginTop: 0, fontSize: '1.15rem' }}>
                 ⚖️ Avaliação Nutricional
               </h3>
@@ -536,7 +548,7 @@ export default function Pacientes() {
             </div>
 
             {/* Bloco 3: Alergias e Restrições */}
-            <div className="card" style={{ backgroundColor: '#fafbfa', margin: 0, gridColumn: 'span 2' }}>
+            <div className="card" style={{ backgroundColor: 'var(--bg-main)', margin: 0, gridColumn: 'span 2' }}>
               <h3 style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', color: 'var(--danger)', marginTop: 0, fontSize: '1.15rem' }}>
                 ⚠️ Alergias e Restrições Alimentares
               </h3>
@@ -574,7 +586,7 @@ export default function Pacientes() {
             </div>
 
             {/* Bloco 4: Conduta Nutricional */}
-            <div className="card" style={{ backgroundColor: '#fafbfa', margin: 0, gridColumn: 'span 2' }}>
+            <div className="card" style={{ backgroundColor: 'var(--bg-main)', margin: 0, gridColumn: 'span 2' }}>
               <h3 style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', color: 'var(--primary)', marginTop: 0, fontSize: '1.15rem' }}>
                 🥦 Histórico e Conduta Nutricional
               </h3>
@@ -632,7 +644,7 @@ export default function Pacientes() {
                   </div>
 
                   {/* Notas */}
-                  <div style={{ backgroundColor: '#fafbfa', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '12px 16px', fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+                  <div style={{ backgroundColor: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '12px 16px', fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
                     {entry.notas}
                   </div>
                 </div>
@@ -738,6 +750,7 @@ export default function Pacientes() {
             ))}
           </div>
         </div>
+        </div> {/* fecha print-area */}
 
       </div>
     )
@@ -894,7 +907,7 @@ export default function Pacientes() {
                   </div>
                 </div>
 
-                <div style={{ backgroundColor: '#fafbfa', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                <div style={{ backgroundColor: 'var(--bg-main)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
                   {renderEvolutionChart()}
                 </div>
               </div>

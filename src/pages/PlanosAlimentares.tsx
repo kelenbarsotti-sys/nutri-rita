@@ -804,17 +804,59 @@ export default function PlanosAlimentares() {
               </button>
             </div>
 
-            <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+            <div id="print-area" className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
               {renderPlanoConteudoFormatado(selectedPlano.conteudo)}
             </div>
 
-            <div className="modal-footer">
+            <div className="modal-footer no-print">
               <button 
                 type="button" 
                 className="btn btn-secondary" 
                 onClick={() => setSelectedPlano(null)}
               >
                 Fechar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  const conteudo = document.getElementById('print-area')?.innerHTML
+                  const titulo = selectedPlano?.pacientes?.nome || 'Plano Alimentar'
+                  const janela = window.open('', '_blank', 'width=900,height=700')
+                  if (!janela || !conteudo) return
+                  janela.document.write(`
+                    <!DOCTYPE html>
+                    <html lang="pt-BR">
+                    <head>
+                      <meta charset="UTF-8" />
+                      <title>Plano Alimentar - ${titulo}</title>
+                      <style>
+                        body { font-family: Arial, sans-serif; color: #111; background: #fff; padding: 24px; margin: 0; }
+                        h1 { font-size: 1.4rem; margin-bottom: 16px; color: #7c3aed; }
+                        ul { padding-left: 18px; margin: 6px 0; }
+                        li { margin-bottom: 4px; font-size: 0.9rem; }
+                        .card-refeicao-detalhe { border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 14px; break-inside: avoid; }
+                        .refeicao-nome-detalhe { font-weight: bold; font-size: 1rem; }
+                        .refeicao-header-detalhe { margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+                        * { color: #111 !important; background: transparent !important; }
+                        @media print { body { padding: 0; } }
+                      </style>
+                    </head>
+                    <body>
+                      <h1>Plano Alimentar — ${titulo}</h1>
+                      ${conteudo}
+                    </body>
+                    </html>
+                  `)
+                  janela.document.close()
+                  janela.focus()
+                  janela.print()
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+                </svg>
+                Imprimir Plano
               </button>
             </div>
           </div>

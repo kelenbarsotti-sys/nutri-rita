@@ -523,6 +523,7 @@ input:disabled, select:disabled, textarea:disabled {
 .btn-secondary:hover {
   background-color: rgba(255, 255, 255, 0.15);
   transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(167, 139, 250, 0.2);
 }
 
 /* Patient Card & List */
@@ -1909,4 +1910,70 @@ input:disabled, select:disabled, textarea:disabled {
   .auth-card { padding: 24px 20px 28px; border-radius: 20px; }
   .auth-wrapper { padding: 16px; }
   .auth-logo-text { font-size: 2rem; }
+}
+
+/* ===== IMPRESSÃO ===== */
+@media print {
+  /* Fundo branco, texto preto */
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  /* Esconde elementos de navegação e ação */
+  .sidebar,
+  .no-print,
+  .btn-close-modal,
+  .homescreen-banner,
+  .dashboard-grid,
+  .form-tabs,
+  .modal-footer,
+  .app-orb {
+    display: none !important;
+  }
+
+  /* Remove margens do layout */
+  .main-content {
+    margin-left: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Modal ocupa a página toda */
+  .modal-overlay {
+    position: static !important;
+    background: transparent !important;
+    overflow: visible !important;
+  }
+
+  .modal-card {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+  }
+
+  .modal-body {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Cards sem sombra */
+  .card, .card-refeicao-detalhe {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+    background: #fff !important;
+    color: #111 !important;
+    break-inside: avoid;
+  }
+
+  /* Texto legível */
+  * {
+    color: #111 !important;
+    background: transparent !important;
+    -webkit-print-color-adjust: exact;
+  }
 }

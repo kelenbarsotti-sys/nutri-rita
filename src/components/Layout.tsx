@@ -70,7 +70,7 @@ export default function Layout() {
           </NavLink>
 
           <NavLink 
-            to="/agenda" 
+            to="/dashboard/agenda" 
             className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
           >
             <svg 
@@ -92,7 +92,7 @@ export default function Layout() {
           </NavLink>
 
           <NavLink 
-            to="/pacientes" 
+            to="/dashboard/pacientes" 
             className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
           >
             <svg 
@@ -114,7 +114,7 @@ export default function Layout() {
           </NavLink>
 
           <NavLink 
-            to="/planos-alimentares" 
+            to="/dashboard/planos-alimentares" 
             className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
           >
             <svg 
